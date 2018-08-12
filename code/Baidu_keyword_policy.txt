@@ -1,0 +1,197 @@
+select keyword_name
+       ,match_type
+       ,price 
+from (
+        select keyword_name
+               ,match_type
+               ,price
+               ,weighted_cpa
+               ,row_number() over(partition by keyword_name order by dt desc) rank 
+        from (
+                select keyword_name
+                        ,match_type
+                        ,price
+                        ,weighted_cpa, weighted_cpc
+                        ,dt
+                        ,total_impression
+                        ,total_click
+                        ,total_cost
+                        ,rgcnt
+                from (
+                        select  mid1.keyword_id
+                                ,mid1.keyword_code
+                                ,mid1.keyword_name
+                                ,mid1.match_type
+                                ,mid1.price
+                                ,mid1.total_click
+                                ,mid1.total_cost
+                                ,mid1.total_impression
+                                ,mid1.dt
+                                ,mid2.rgcnt
+                                ,sqrt(total_impression)/(total_cost/total_click) as weighted_cpc
+                                ,sqrt(total_impression)/(total_cost/rgcnt)*rgcnt as weighted_cpa
+                            from (
+                                    select  repo.keyword_id
+                                            ,baidu.keyword_code
+                                            ,baidu.keyword_name
+                                            ,repo.dt
+                                            ,repo.total_click
+                                            ,repo.total_cost
+                                            ,repo.total_impression
+                                            ,baidu.match_type
+                                            ,baidu.price
+                                        from (
+                                                select  keyword_id
+                                                        ,dt
+                                                        ,SUM(cost) as total_cost
+                                                        ,SUM(click) as total_click
+                                                        ,SUM(impression) as total_impression
+                                                from people.trfc_baidu_report_info_mojie group by keyword_id, dt
+                                        ) repo
+                                        left join traffic.v_t_baidu_keyword baidu
+                                        on repo.keyword_id = baidu.keyword_id
+                            ) mid1
+                            left join (
+                                select  keyword_code
+                                        ,dt
+                                        ,count(*) as rgcnt 
+                                from(
+                                    select  keyword_code
+                                            ,regexp_replace(date(rgstr_time),'-','') as dt
+                                    from people.trfc_mj_data_info
+                                ) midd group by keyword_code, dt 
+                            ) mid2
+                            on mid1.keyword_code = mid2.keyword_code and mid1.dt = mid2.dt 
+                            where mid1.keyword_code != '' 
+                ) mid3
+                where rgcnt is not null and total_cost!=0 order by weighted_cpa desc,weighted_cpc desc
+        ) mid4
+        where weighted_cpa > 1.5 and rgcnt > 1
+) mid 
+where rank =1 order by weighted_cpa desc
+
+
+--将价格进行修改，添加进有潜力的关键词，只看click，cpc
+select  account_name
+        ,campaign_name
+        ,adgroup_name
+        ,keyword_name
+        ,match_type
+        ,price*1.2
+from (
+        select keyword_name
+               ,account_name
+               ,campaign_name
+               ,adgroup_name
+               ,match_type
+               ,price
+               ,weighted_cpa
+               ,row_number() over(partition by keyword_name order by dt desc) rank 
+        from (
+                select keyword_name
+                        ,account_name
+                        ,campaign_name
+                        ,adgroup_name
+                        ,match_type
+                        ,price
+                        ,weighted_cpa, weighted_cpc
+                        ,dt
+                        ,total_impression
+                        ,total_click
+                        ,total_cost
+                        ,rgcnt
+                from (
+                        select  mid1.keyword_id
+                                ,mid1.keyword_code
+                                ,mid1.keyword_name
+                                ,mid1.account_name
+                                ,mid1.campaign_name
+                                ,mid1.adgroup_name
+                                ,mid1.match_type
+                                ,mid1.price
+                                ,mid1.total_click
+                                ,mid1.total_cost
+                                ,mid1.total_impression
+                                ,mid1.dt
+                                ,mid2.rgcnt
+                                ,sqrt(total_impression)/(total_cost/total_click) as weighted_cpc
+                                ,sqrt(total_impression)/(total_cost/rgcnt)*rgcnt as weighted_cpa
+                            from (
+                                    select  repo.keyword_id
+                                            ,baidu.keyword_code
+                                            ,baidu.keyword_name
+                                            ,baidu.account_name
+                                            ,baidu.campaign_name
+                                            ,baidu.adgroup_name
+                                            ,repo.dt
+                                            ,repo.total_click
+                                            ,repo.total_cost
+                                            ,repo.total_impression
+                                            ,baidu.match_type
+                                            ,baidu.price
+                                        from (
+                                                select  keyword_id
+                                                        ,dt
+                                                        ,SUM(cost) as total_cost
+                                                        ,SUM(click) as total_click
+                                                        ,SUM(impression) as total_impression
+                                                from people.trfc_baidu_report_info_mojie group by keyword_id, dt
+                                        ) repo
+                                        left join traffic.v_t_baidu_keyword baidu
+                                        on repo.keyword_id = baidu.keyword_id
+                            ) mid1
+                            left join (
+                                select  keyword_code
+                                        ,dt
+                                        ,count(*) as rgcnt 
+                                from(
+                                    select  keyword_code
+                                            ,regexp_replace(date(rgstr_time),'-','') as dt
+                                    from people.trfc_mj_data_info
+                                ) midd group by keyword_code, dt 
+                            ) mid2
+                            on mid1.keyword_code = mid2.keyword_code and mid1.dt = mid2.dt 
+                            where mid1.keyword_code != '' 
+                ) mid3
+                where rgcnt is not null and total_cost!=0 order by weighted_cpa desc,weighted_cpc desc
+        ) mid4
+        where weighted_cpa > 1.5 and rgcnt > 1
+) mid 
+where rank =1 order by weighted_cpa desc
+
+
+
+--选择没有注册记录的
+select account_name
+        ,campaign_name
+        ,adgroup_name
+        ,keyword_name
+        ,match_type
+        ,price
+from(
+
+    select  repo.keyword_id
+            ,baidu.keyword_code
+            ,baidu.keyword_name
+            ,baidu.account_name
+            ,baidu.campaign_name
+            ,baidu.adgroup_name
+            ,repo.dt
+            ,repo.total_click
+            ,repo.total_cost
+            ,repo.total_impression
+            ,baidu.match_type
+            ,baidu.price
+            ,sqrt(repo.total_impression)/(repo.total_cost/repo.total_click) as weighted_cpc
+        from (
+                select  keyword_id
+                        ,dt
+                        ,SUM(cost) as total_cost
+                        ,SUM(click) as total_click
+                        ,SUM(impression) as total_impression
+                from people.trfc_baidu_report_info_mojie group by keyword_id, dt
+        ) repo
+        left join traffic.v_t_baidu_keyword baidu
+        on repo.keyword_id = baidu.keyword_id
+) midd
+where keyword_code != '' order by weighted_cpc desc limit 50
